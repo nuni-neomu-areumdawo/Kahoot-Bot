@@ -183,7 +183,7 @@ async def main():
         print("Script finished.")
 
 if __name__ == "__main__":
-    print("Consider starring this on GitHub and checking out my other projects!")
+    print("Consider starring this on GitHub and checking out my other projects! https://github.com/nuni-neomu-areumdawo/Kahoot-Bot")
     
     try:
         asyncio.run(main())
