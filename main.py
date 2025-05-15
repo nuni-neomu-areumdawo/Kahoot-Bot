@@ -183,7 +183,8 @@ async def main():
         print("Script finished.")
 
 if __name__ == "__main__":
-    print("PLEASE GIVE THIS PROJECT A STAR AND REPORT ANY ISSUES")
+    print("Consider starring this on GitHub and checking out my other projects!")
+    
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
