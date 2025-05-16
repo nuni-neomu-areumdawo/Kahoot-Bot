@@ -1,6 +1,6 @@
-# Kahoot-Bot
+# Free Kahoot-Bot
 
-### An Async Python Bot for Kahoot! (Targeting 2025 Functionality)
+### An Async Python Bot for Kahoot! (Functional in 2025)
 
 ## About
 
