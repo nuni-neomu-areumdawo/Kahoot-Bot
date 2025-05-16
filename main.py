@@ -10,12 +10,14 @@ from selenium.common.exceptions import TimeoutException
 from os import cpu_count
 
 KAHOOT_URL = "https://kahoot.it/"
-DEFAULT_BOT_COUNT = cpu_count() * 2
+DEFAULT_BOT_COUNT = cpu_count() 
 MAX_BOT_NAME_SUFFIX = 1048576
 CONCURRENT_BOTS = cpu_count()
 PAGE_LOAD_TIMEOUT = 16
 ELEMENT_INTERACTION_TIMEOUT = 8
 GAMEPLAY_WAIT_TIMEOUT = 64
+message = []
+counter = 0
 
 def generate_bot_name(base_name: str, bot_number: int) -> str:
     return f"{base_name}-{bot_number}-{random.randint(0, MAX_BOT_NAME_SUFFIX)}"
@@ -36,7 +38,7 @@ def create_webdriver_options() -> Options:
     chrome_options.add_argument('--disable-features=NetworkService,NetworkServiceInProcess')
     return chrome_options
 
-def join_kahoot_instance_sync(game_pin: str, bot_true_name: str, bot_display_number: int, total_bots: int):
+def join_kahoot_instance_sync(game_pin: str, bot_true_name: str, bot_display_number: int, total_bots: int, ephemeral : bool = False, messages : list = [], lifetime : int = 0):
     bot_label = f"[Bot {bot_display_number}/{total_bots} - {bot_true_name}]"
     driver = None
     try:
@@ -61,8 +63,9 @@ def join_kahoot_instance_sync(game_pin: str, bot_true_name: str, bot_display_num
         print(f"{bot_label}: Entering name '{bot_true_name}'...\n")
         username_input_element.send_keys(bot_true_name)
         username_submit_button = wait.until(EC.element_to_be_clickable(username_submit_button_locator))
+            
         username_submit_button.click()
-
+        counter += 1
         wait.until(EC.staleness_of(username_input_element))
         print(f"SUCCESS: {bot_label} has joined the game!\n")
 
@@ -73,6 +76,12 @@ def join_kahoot_instance_sync(game_pin: str, bot_true_name: str, bot_display_num
         short_game_wait = WebDriverWait(driver, ELEMENT_INTERACTION_TIMEOUT)
 
         question_count = 0
+        if(ephemeral):
+            if(lifetime > 0):
+                time.sleep(lifetime)
+            driver.close()
+            return
+        
         while True:
             try:
                 clickable_answer_buttons = game_wait.until(
@@ -123,7 +132,7 @@ def join_kahoot_instance_sync(game_pin: str, bot_true_name: str, bot_display_num
             pass
 
 
-async def launch_bot_task(semaphore, game_pin, base_bot_name, bot_number, total_bots):
+async def launch_bot_task(semaphore, game_pin, base_bot_name, bot_number, total_bots, ephemeral, messages, lifetime):
     async with semaphore:
         bot_name = generate_bot_name(base_bot_name, bot_number)
         print(f"Preparing Bot {bot_number}/{total_bots} ({bot_name})...")
@@ -134,7 +143,10 @@ async def launch_bot_task(semaphore, game_pin, base_bot_name, bot_number, total_
             game_pin,
             bot_name,
             bot_number,
-            total_bots
+            total_bots,
+            ephemeral,
+            messages,
+            lifetime
         )
 
 async def main():
@@ -146,16 +158,36 @@ async def main():
         except Exception as e:
             print(f"Ensure you enter an integer. {e}")
             pass
-    base_bot_name = input("Enter the name of the bot: ")
     
-    done = False
-    while not done:
-        try:
-            num_bots = int(input(f"Enter the number of bots in total, note ({cpu_count()} will join at once): "))
-            done = True
-        except Exception as e:
-            print(f"Ensure you enter an integer. {e}")
-            pass
+    ephemeral = "y" in input("ephemeral (y/n): ").casefold()
+    lifetime = 0
+
+    if(ephemeral):
+        done = False
+
+        message = "y" in input("read from ./message.txt (y/n): ").casefold()
+        
+        if(message):
+            message = open("./message.txt", encoding="utf-8").read().split(" ")
+            num_bots = len(message)
+        else:
+            while not done:
+                try:
+                    num_bots = int(input(f"Enter the number of bots in total, note ({cpu_count()} will join at once): "))
+                    lifetime = int(input(f"Enter the lifetime of bots in seconds: "))
+
+                    done = True
+
+                    
+                except Exception as e:
+                    print(f"Ensure you enter an integer. {e}")
+                    pass
+
+            message = []
+
+    base_bot_name = ""
+    if(len(message) == 0):
+        base_bot_name = input("Enter the name of the bot: ")
     
     semaphore = asyncio.Semaphore(CONCURRENT_BOTS)
     tasks = []
@@ -163,10 +195,19 @@ async def main():
     print(f"\nAttempting to launch {num_bots} bot(s) with base name '{base_bot_name}' for PIN '{game_pin}'...")
 
     start_time = time.time()
-    for i in range(1, num_bots + 1):
-        task = launch_bot_task(semaphore, game_pin, base_bot_name, i, num_bots)
-        tasks.append(task)
-    
+
+    my_id = 0
+    if(ephemeral and len(message) > 0):
+        for i in range(len(message)):
+            for x in range(CONCURRENT_BOTS // 8):
+                task = launch_bot_task(semaphore, game_pin, f"{message[my_id]}", x, num_bots, ephemeral, message, lifetime)
+                tasks.append(task)
+            my_id += 1
+    else:
+        for i in range(1, num_bots + 1):
+            task = launch_bot_task(semaphore, game_pin, base_bot_name, i, num_bots, ephemeral, message, lifetime)
+            tasks.append(task)
+        
     await asyncio.gather(*tasks)
     
     end_time = time.time()
@@ -184,10 +225,8 @@ async def main():
 
 if __name__ == "__main__":
     print("Consider starring this on GitHub and checking out my other projects! https://github.com/nuni-neomu-areumdawo/Kahoot-Bot")
-    
+
     try:
         asyncio.run(main())
     except KeyboardInterrupt:
         print("\nScript interrupted by user. Shutting down.")
-    except Exception as e_main:
-        print(f"Unhandled exception in main execution: {e_main}")
